@@ -12,8 +12,10 @@
 
 class ShortenedUrl < ActiveRecord::Base
   validates :long_url, presence: true
+  validates :long_url, length: { maximum: 1024 }
   validates :short_url, presence: true
   validates :submitter_id, presence: true
+  validate :number_of_urls_submitted_in_last_minute_by_same_user
 
   belongs_to(
     :submitter,
@@ -34,6 +36,19 @@ class ShortenedUrl < ActiveRecord::Base
     Proc.new { distinct },
     through: :visits,
     source: :user
+  )
+
+  has_many(
+    :taggings,
+    class_name: :Tagging,
+    foreign_key: :url_id,
+    primary_key: :id
+  )
+
+  has_many(
+    :tags,
+    through: :taggings,
+    source: :tag
   )
 
   def self.random_code
@@ -60,5 +75,9 @@ class ShortenedUrl < ActiveRecord::Base
     visits.where("created_at > ?", time_period).select(:user_id).distinct.count
   end
 
-
+  private
+  def number_of_urls_submitted_in_last_minute_by_same_user
+    count = ShortenedUrl.all.where("created_at > ? AND submitter_id = ?", 5.minutes.ago, submitter_id).count
+    errors[:base] << "too many submissions by user within last 5 minutes" if count > 5
+  end
 end
